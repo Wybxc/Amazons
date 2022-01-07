@@ -300,8 +300,8 @@ class Game():
 
 
 @hash_cache
-def valid_actions_num(game: Game) -> Tuple[int, int]:
-    """获取当前局面下所有合法的动作的数目.
+def mobility(game: Game) -> Tuple[int, int]:
+    """获取当前局面下所有合法的动作的数目(灵活度).
     
     Returns:
         白棋, 黑棋.
@@ -348,27 +348,193 @@ def valid_actions_num(game: Game) -> Tuple[int, int]:
         return result
 
     white_num, black_num = 0, 0
+    white_min_num, black_min_num = 10000, 10000
     for white in game.amazons_white:
-        white_num += get_move_count(white)
+        white_num_m = get_move_count(white)
+        white_num += white_num_m
+        white_min_num = min(white_min_num, white_num_m)
     for black in game.amazons_black:
-        black_num += get_move_count(black)
+        black_num_m = get_move_count(black)
+        black_num += black_num_m
+        black_min_num = min(black_min_num, black_num_m)
+    white_num += white_min_num * 4
+    black_num += black_min_num * 4
     return white_num, black_num
 
 
-# def queen_king_move(self):
+@hash_cache
+def terroity_position(game: Game) -> Tuple[float, float, float, float]:
+    """白方的 terroity 特征值和 position 特征值.
+    
+    Returns:
+        白棋的 terroity_1 特征值, 白棋的 position_1 特征值,
+        白棋的 terroity_2 特征值, 白棋的 position_2 特征值,        
+    """
+    def queen_move_func(color: bool):
+        queen_mv = np.where(game.board == 1, 10000, -1)
+
+        for p in game.amazon(color):
+            queen_mv[p] = 0
+            for d in range(8):
+                tx, ty = p.x + _DX[d], p.y + _DY[d]
+                while (
+                    0 <= tx < game.board_size and 0 <= ty < game.board_size
+                    and not game.board[tx, ty]
+                ):
+                    queen_mv[tx, ty] = 1
+                    tx, ty = tx + _DX[d], ty + _DY[d]
+
+        def get_queen_move(p: Block):
+            if queen_mv[p] == -1:
+                if not game.board[p]:
+                    mv = 10000
+                    queen_mv[p] = mv
+                    for d in range(8):
+                        tx, ty = p.x + _DX[d], p.y + _DY[d]
+                        while (
+                            0 <= tx < game.board_size
+                            and 0 <= ty < game.board_size
+                            and not game.board[tx, ty]
+                        ):
+                            if queen_mv[tx, ty] == -1:
+                                mv = min(mv, get_queen_move(Block(tx, ty)) + 1)
+                            elif queen_mv[tx, ty] > 1000:
+                                break
+                            else:
+                                mv = min(mv, queen_mv[tx, ty] + 1)
+                            tx, ty = tx + _DX[d], ty + _DY[d]
+                    queen_mv[p] = mv
+                else:
+                    queen_mv[p] = 10000
+            return queen_mv[p]
+
+        return get_queen_move, queen_mv
+
+    def king_move_func(color: bool):
+        king_mv = np.where(game.board == 1, 10000, -1)
+
+        for p in game.amazon(color):
+            king_mv[p] = 0
+            for d in range(8):
+                tx, ty = p.x + _DX[d], p.y + _DY[d]
+                i = 1
+                while (
+                    0 <= tx < game.board_size and 0 <= ty < game.board_size
+                    and not game.board[tx, ty]
+                ):
+                    king_mv[tx, ty] = i
+                    i += 1
+                    tx, ty = tx + _DX[d], ty + _DY[d]
+
+        def get_king_move(p: Block):
+            if king_mv[p] == -1:
+                if not game.board[p]:
+                    mv = 10000
+                    king_mv[p] = mv
+                    for d in range(8):
+                        tx, ty = p.x + _DX[d], p.y + _DY[d]
+                        i = 1
+                        while (
+                            0 <= tx < game.board_size
+                            and 0 <= ty < game.board_size
+                            and not game.board[tx, ty]
+                        ):
+                            if king_mv[tx, ty] == -1:
+                                mv = min(mv, get_king_move(Block(tx, ty)) + i)
+                            elif king_mv[tx, ty] > 1000:
+                                break
+                            else:
+                                mv = min(mv, king_mv[tx, ty] + i)
+                            i += 1
+                            tx, ty = tx + _DX[d], ty + _DY[d]
+                    king_mv[p] = mv
+                else:
+                    king_mv[p] = 10000
+            return king_mv[p]
+
+        return get_king_move, king_mv
+
+    queen_move_white, qm_white_c = queen_move_func(True)
+    queen_move_black, qm_black_c = queen_move_func(False)
+    king_move_white, km_white_c = king_move_func(True)
+    king_move_black, km_black_c = king_move_func(False)
+
+    white_terroity_1 = 0.
+    white_position_1 = 0.
+    white_terroity_2 = 0.
+    white_position_2 = 0.
+
+    for x in range(game.board_size):
+        for y in range(game.board_size):
+            if not game.board[x, y]:
+                queen_move_white(Block(x, y))
+                queen_move_black(Block(x, y))
+                king_move_white(Block(x, y))
+                king_move_black(Block(x, y))
+
+    white_terroity_1 += np.sum(qm_white_c > qm_black_c)
+    white_terroity_1 -= np.sum(qm_white_c < qm_black_c)
+    if game.current:
+        white_terroity_1 += np.sum(
+            (qm_white_c == qm_black_c) & (qm_white_c < 1000)
+        ) * 0.2
+    else:
+        white_terroity_1 -= np.sum(
+            (qm_white_c == qm_black_c) & (qm_white_c < 1000)
+        ) * 0.2
+
+    white_terroity_2 += np.sum(km_white_c > km_black_c)
+    white_terroity_2 -= np.sum(km_white_c < km_black_c)
+    if game.current:
+        white_terroity_2 += np.sum(
+            (km_white_c == km_black_c) & (km_white_c < 1000)
+        ) * 0.2
+    else:
+        white_terroity_2 -= np.sum(
+            (km_white_c == km_black_c) & (km_white_c < 1000)
+        ) * 0.2
+
+    white_position_1 += np.where(
+        game.board == 0,
+        2.0**(1 - qm_black_c) - 2.0**(1 - qm_white_c),
+        0.0,
+    ).sum()
+
+    white_position_2 += np.where(
+        game.board == 0,
+        np.clip((km_white_c-km_black_c) / 6, -1, 1),
+        0.0,
+    ).sum()
+
+    return white_terroity_1, white_position_1, white_terroity_2, white_position_2
+
+
+def std(x):
+    return 1 / (1 + np.exp(-x * 2))
 
 
 def judge(game: Game) -> float:
     """给出当前局面的胜率评估。"""
     color = game.current
 
-    this, other = valid_actions_num(game)
+    t1, p1, t2, p2 = terroity_position(game)
+    if color:
+        t1, p1, t2, p2 = -t1, -p1, -t2, -p2
+
+    this, other = mobility(game)
     if not color:
         other, this = this, other
 
-    score = (this+1e-10) / (this+other+2e-10)
+    m = (this+1e-10) / (this+other+2e-10)
 
-    return float(score)
+    if game.turn <= 20:
+        a, b, c, d, e = 0.14, 0.37, 0.13, 0.13, 0.23
+    elif game.turn <= 40:
+        a, b, c, d, e = 0.3, 0.25, 0.2, 0.2, 0.05
+    else:
+        a, b, c, d, e = 0.8, 0.1, 0.05, 0.05, 0.0
+
+    return float(a * std(t1) + b * std(t2) + c * std(p1) + d * std(p2) + e*m)
 
 
 class GameFinished(Exception):
@@ -437,7 +603,7 @@ class MCTNode():
 
     def ended(self):
         """判断当前局面是否结束."""
-        return len(self.available_actions) == 0 and len(self.actions) == 0
+        return not len(self.available_actions) and not len(self.actions)
 
     def expandable(self):
         """检查是否可以展开子节点."""
@@ -456,7 +622,9 @@ class MCTNode():
 
     def rollout(self) -> float:
         """计算当前局面的收益."""
-        return judge(self.game) - self.base_score
+        score = judge(self.game)
+        diff = (score - self.base_score) / score
+        return np.clip(np.tanh(diff), -1, 1)
 
 
 class MCT():

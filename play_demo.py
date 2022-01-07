@@ -27,7 +27,7 @@ def print_game(game: Game, with_score: bool, steps: int):
     """
     print("\033c", end="")
     board_size = game.board_size
-    print('Current:', 'White' if game.current else 'Black')
+    print('Turn:', game.turn, 'Current:', 'White' if game.current else 'Black')
     print('┏' + '━━━┳' * (board_size-1) + '━━━┓')
     for row in range(board_size):
         print('┃', end='')
@@ -48,7 +48,7 @@ def print_game(game: Game, with_score: bool, steps: int):
         black_score = 1 - white_score
         print(f'White: {white_score:4f}  Black: {black_score:4f}')
         print('Search steps:', steps)
-        print('Search depth:', steps / max(white_moves, black_moves))
+        print('Search depth:', steps / (max(white_moves, black_moves) + 1))
 
 
 def play():
@@ -61,7 +61,7 @@ def play():
     i = 0
     while True:
         print_game(game, True, i)
-        limit = TimeLimit(1)
+        limit = TimeLimit(5.5)
         try:
             i, game, *_ = step(game, limit)
         except GameFinished as gg:
