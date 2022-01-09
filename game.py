@@ -724,6 +724,7 @@ class CountLimit():
 if __name__ == "__main__":
     game = Game(8)
     turn = int(input())
+    t = time.time()
     for i in range(2*turn - 1):
         from_x, from_y, to_x, to_y, arrow_x, arrow_y = map(
             int,
@@ -735,5 +736,6 @@ if __name__ == "__main__":
                 Block(arrow_x, arrow_y)
             )
 
-    _, _, from_pos, to_pos, arrow_pos = step(game, TimeLimit(5.5))
+    _, _, from_pos, to_pos, arrow_pos = step(game, TimeLimit(5.8))
     print(' '.join(map(str, [*from_pos, *to_pos, *arrow_pos])))
+    print('Time:', time.time() - t)

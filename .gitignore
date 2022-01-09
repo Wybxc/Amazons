@@ -154,3 +154,6 @@ cython_debug/
 # Botzone secrets
 botzone.yml
 old/
+
+# paperwork
+*.pdf

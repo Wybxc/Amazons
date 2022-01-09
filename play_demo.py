@@ -26,7 +26,7 @@ def print_game(game: Game, with_score: bool, steps: int):
         with_score: 是否打印得分
         steps: 搜索步数
     """
-    # print("\033c", end="")
+    print("\033c", end="")
     board_size = game.board_size
     print('Turn:', game.turn, 'Current:', 'White' if game.current else 'Black')
     print('┏' + '━━━┳' * (board_size-1) + '━━━┓')
@@ -49,10 +49,10 @@ def print_game(game: Game, with_score: bool, steps: int):
         this, other = mobility(game)
         m = (this+1e-10) / (this+other+2e-10)
         print(
-            't1: {0:.2f}, t2: {2:.2f}, p1: {1:.2f}, p2: {3:.2f}, m: {4:.2f}'.
-            format(*terroity_position(game), m)
+            'White score: t1: {0:.2f}, t2: {2:.2f}, p1: {1:.2f}, p2: {3:.2f}, m: {4:.2f}'
+            .format(*terroity_position(game), m)
         )
-        print('Judge: ', judge(game))
+        print('Judge(Current): ', judge(game))
         print('Search steps:', steps)
         print('Search depth:', steps / (max(white_moves, black_moves) + 1))
 
@@ -63,29 +63,16 @@ def play():
     board_size = 8
 
     game = Game(board_size)
-
-    jl = []
-    cl = []
-
     i = 0
     while True:
         print_game(game, True, i)
         limit = TimeLimit(5.5)
         try:
             i, game, *_ = step(game, limit)
-            jl.append(judge(game))
-            cl.append(1 if game.current else 0)
         except GameFinished as gg:
-            print_game(game, False, i)
-            print('Game finished!')
+            print_game(game, True, i)
             print('Winner:', 'white' if gg.winner else 'black')
             break
-
-    import matplotlib.pyplot as plt
-    plt.plot(jl, label='judge')
-    plt.plot(cl, label='current')
-    plt.legend()
-    plt.show()    
 
 
 if __name__ == '__main__':

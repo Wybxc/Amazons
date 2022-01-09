@@ -105,7 +105,7 @@ class BotzoneOnlineGame():
                 print_game(game, True, i)
 
             try:
-                i, _, from_pos, to_pos, arrow_pos = step(game, TimeLimit(6))
+                i, _, from_pos, to_pos, arrow_pos = step(game, TimeLimit(50))
             except GameFinished as gg:
                 if draw:
                     print_game(game, False, i)
@@ -132,6 +132,10 @@ class BotzoneOnlineGame():
 
 
 def play(white: bool):
+    """开始本地 AI 对局。
+    Args:
+        white: 己方是否为白棋。
+    """
     with open('botzone.yml') as f:
         config = yaml.safe_load(f)
 
@@ -143,4 +147,10 @@ def play(white: bool):
 
 
 if __name__ == '__main__':
-    play(True)
+    t = time.time()
+    while True:
+        play(True)        
+        if time.time() - t > 60:
+            break
+        else:
+            time.sleep(20)
