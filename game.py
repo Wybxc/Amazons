@@ -323,7 +323,7 @@ def mobility(game: Game) -> Tuple[int, int]:
         return arrow_count[i, j, d]
 
     def get_move_count(p: Block):
-        free = [1] * 8  # 由于棋子移动, 在d方向上多出来的可以放置障碍的空位数量
+        free = np.ones((8, ), dtype=np.int32)  # 由于棋子移动, 在d方向上多出来的可以放置障碍的空位数量
         for d in range(8):
             tx, ty = p.x + _DX[d], p.y + _DY[d]
             while (
@@ -357,6 +357,7 @@ def mobility(game: Game) -> Tuple[int, int]:
         black_num_m = get_move_count(black)
         black_num += black_num_m
         black_min_num = min(black_min_num, black_num_m)
+
     white_num += white_min_num * 4
     black_num += black_min_num * 4
     return white_num, black_num
@@ -383,29 +384,27 @@ def terroity_position(game: Game) -> Tuple[float, float, float, float]:
                 ):
                     queen_mv[tx, ty] = 1
                     tx, ty = tx + _DX[d], ty + _DY[d]
+        for p in game.amazon(not color):
+            queen_mv[p] = 10000
 
         def get_queen_move(p: Block):
             if queen_mv[p] == -1:
-                if not game.board[p]:
-                    mv = 10000
-                    queen_mv[p] = mv
-                    for d in range(8):
-                        tx, ty = p.x + _DX[d], p.y + _DY[d]
-                        while (
-                            0 <= tx < game.board_size
-                            and 0 <= ty < game.board_size
-                            and not game.board[tx, ty]
-                        ):
-                            if queen_mv[tx, ty] == -1:
-                                mv = min(mv, get_queen_move(Block(tx, ty)) + 1)
-                            elif queen_mv[tx, ty] > 1000:
-                                break
-                            else:
-                                mv = min(mv, queen_mv[tx, ty] + 1)
-                            tx, ty = tx + _DX[d], ty + _DY[d]
-                    queen_mv[p] = mv
-                else:
-                    queen_mv[p] = 10000
+                mv = 10000
+                queen_mv[p] = mv
+                for d in range(8):
+                    tx, ty = p.x + _DX[d], p.y + _DY[d]
+                    while (
+                        0 <= tx < game.board_size and 0 <= ty < game.board_size
+                        and not game.board[tx, ty]
+                    ):
+                        if queen_mv[tx, ty] == -1:
+                            mv = min(mv, get_queen_move(Block(tx, ty)) + 1)
+                        elif queen_mv[tx, ty] > 1000:
+                            break
+                        else:
+                            mv = min(mv, queen_mv[tx, ty] + 1)
+                        tx, ty = tx + _DX[d], ty + _DY[d]
+                queen_mv[p] = mv
             return queen_mv[p]
 
         return get_queen_move, queen_mv
@@ -425,31 +424,29 @@ def terroity_position(game: Game) -> Tuple[float, float, float, float]:
                     king_mv[tx, ty] = i
                     i += 1
                     tx, ty = tx + _DX[d], ty + _DY[d]
+        for p in game.amazon(not color):
+            king_mv[p] = 10000
 
         def get_king_move(p: Block):
             if king_mv[p] == -1:
-                if not game.board[p]:
-                    mv = 10000
-                    king_mv[p] = mv
-                    for d in range(8):
-                        tx, ty = p.x + _DX[d], p.y + _DY[d]
-                        i = 1
-                        while (
-                            0 <= tx < game.board_size
-                            and 0 <= ty < game.board_size
-                            and not game.board[tx, ty]
-                        ):
-                            if king_mv[tx, ty] == -1:
-                                mv = min(mv, get_king_move(Block(tx, ty)) + i)
-                            elif king_mv[tx, ty] > 1000:
-                                break
-                            else:
-                                mv = min(mv, king_mv[tx, ty] + i)
-                            i += 1
-                            tx, ty = tx + _DX[d], ty + _DY[d]
-                    king_mv[p] = mv
-                else:
-                    king_mv[p] = 10000
+                mv = 10000
+                king_mv[p] = mv
+                for d in range(8):
+                    tx, ty = p.x + _DX[d], p.y + _DY[d]
+                    i = 1
+                    while (
+                        0 <= tx < game.board_size and 0 <= ty < game.board_size
+                        and not game.board[tx, ty]
+                    ):
+                        if king_mv[tx, ty] == -1:
+                            mv = min(mv, get_king_move(Block(tx, ty)) + i)
+                        elif king_mv[tx, ty] > 1000:
+                            break
+                        else:
+                            mv = min(mv, king_mv[tx, ty] + i)
+                        i += 1
+                        tx, ty = tx + _DX[d], ty + _DY[d]
+                king_mv[p] = mv
             return king_mv[p]
 
         return get_king_move, king_mv
@@ -472,8 +469,8 @@ def terroity_position(game: Game) -> Tuple[float, float, float, float]:
                 king_move_white(Block(x, y))
                 king_move_black(Block(x, y))
 
-    white_terroity_1 += np.sum(qm_white_c > qm_black_c)
-    white_terroity_1 -= np.sum(qm_white_c < qm_black_c)
+    white_terroity_1 += np.sum(qm_white_c < qm_black_c)
+    white_terroity_1 -= np.sum(qm_white_c > qm_black_c)
     if game.current:
         white_terroity_1 += np.sum(
             (qm_white_c == qm_black_c) & (qm_white_c < 1000)
@@ -483,8 +480,8 @@ def terroity_position(game: Game) -> Tuple[float, float, float, float]:
             (qm_white_c == qm_black_c) & (qm_white_c < 1000)
         ) * 0.2
 
-    white_terroity_2 += np.sum(km_white_c > km_black_c)
-    white_terroity_2 -= np.sum(km_white_c < km_black_c)
+    white_terroity_2 += np.sum(km_white_c < km_black_c)
+    white_terroity_2 -= np.sum(km_white_c > km_black_c)
     if game.current:
         white_terroity_2 += np.sum(
             (km_white_c == km_black_c) & (km_white_c < 1000)
@@ -496,21 +493,22 @@ def terroity_position(game: Game) -> Tuple[float, float, float, float]:
 
     white_position_1 += np.where(
         game.board == 0,
-        2.0**(1 - qm_black_c) - 2.0**(1 - qm_white_c),
+        2.0**(1 - qm_white_c) - 2.0**(1 - qm_black_c),
         0.0,
     ).sum()
 
     white_position_2 += np.where(
         game.board == 0,
-        np.clip((km_white_c-km_black_c) / 6, -1, 1),
+        np.clip((km_black_c-km_white_c) / 6, -1, 1),
         0.0,
     ).sum()
 
     return white_terroity_1, white_position_1, white_terroity_2, white_position_2
 
 
-def std(x):
-    return 1 / (1 + np.exp(-x * 2))
+def sd(x):
+    """sigmoid 函数."""
+    return 1 / (1 + np.exp(-2 * x))
 
 
 def judge(game: Game) -> float:
@@ -518,7 +516,7 @@ def judge(game: Game) -> float:
     color = game.current
 
     t1, p1, t2, p2 = terroity_position(game)
-    if color:
+    if not color:  # 当前回合为黑棋行动
         t1, p1, t2, p2 = -t1, -p1, -t2, -p2
 
     this, other = mobility(game)
@@ -527,14 +525,14 @@ def judge(game: Game) -> float:
 
     m = (this+1e-10) / (this+other+2e-10)
 
-    if game.turn <= 20:
+    if game.turn <= 15:
         a, b, c, d, e = 0.14, 0.37, 0.13, 0.13, 0.23
-    elif game.turn <= 40:
+    elif game.turn <= 35:
         a, b, c, d, e = 0.3, 0.25, 0.2, 0.2, 0.05
     else:
         a, b, c, d, e = 0.8, 0.1, 0.05, 0.05, 0.0
 
-    return float(a * std(t1) + b * std(t2) + c * std(p1) + d * std(p2) + e*m)
+    return float(a * sd(t1) + b * sd(t2) + c * sd(p1) + d * sd(p2) + e*m)
 
 
 class GameFinished(Exception):
@@ -623,8 +621,8 @@ class MCTNode():
     def rollout(self) -> float:
         """计算当前局面的收益."""
         score = judge(self.game)
-        diff = (score - self.base_score) / score
-        return np.clip(np.tanh(diff), -1, 1)
+        diff = 1 - score*2
+        return np.clip(diff, -1, 1)
 
 
 class MCT():
@@ -673,7 +671,7 @@ class MCT():
 
     def backup(self, path: Sequence[MCTNode], node: MCTNode):
         """向上传播."""
-        delta = -node.rollout()
+        delta = node.rollout()
 
         node.N += 1
         node.Q += delta
@@ -697,8 +695,6 @@ def step(game: Game, limit: Callable[[], bool]):
     index, to_pos, arrow_pos = game.decode_action(action)
     from_pos = game.amazon()[index]
 
-    # assert game.is_valid_move(from_pos, to_pos)
-    # assert game.is_valid_arrow(from_pos, to_pos, arrow_pos)
     game.do_action(action)
 
     return i, game, from_pos, to_pos, arrow_pos
