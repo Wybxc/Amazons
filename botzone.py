@@ -1,6 +1,7 @@
 """用于botzone的本地AI。"""
 
 import asyncio
+import json
 from typing import Optional, Union
 
 import httpx
@@ -8,6 +9,21 @@ import yaml
 
 from game import *
 from play_demo import print_game
+
+
+def analyze_request(request: str):
+    try:
+        return list(map(int, request.split()))
+    except ValueError:
+        req = json.loads(request)
+        return list(
+            map(
+                int, [
+                    req['x0'], req['y0'], req['x1'], req['y1'], req['x2'],
+                    req['y2']
+                ]
+            )
+        )
 
 
 class BotzoneOnlineGame():
@@ -20,6 +36,7 @@ class BotzoneOnlineGame():
         """
         self.uid = uid
         self.token = token
+        self.game_id = ''
 
     async def start(self, botid: str, white: bool = False) -> str:
         """开始对局。
@@ -38,16 +55,15 @@ class BotzoneOnlineGame():
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.text
+            self.game_id = response.text.strip()
+            return self.game_id
 
     async def request(
         self,
-        game_id: str,
         response: Optional[str] = None,
     ) -> Union[str, bool]:
         """对局请求。
         Args:
-            game_id: 对局ID
             response: 上一回合的响应
 
         Returns:
@@ -60,13 +76,14 @@ class BotzoneOnlineGame():
                 resp = await client.get(url)
             else:
                 resp = await client.get(
-                    url, headers={f'X-Match-{game_id}': response}
+                    url, headers={f'X-Match-{self.game_id}': response}
                 )
             resp.raise_for_status()
 
             status, *games = resp.text.split('\n')
             running, _ = status.split()
             if running == '1':
+                self.game_id = games[0].strip()
                 return games[1]
 
             elif running == '0':
@@ -78,21 +95,19 @@ class BotzoneOnlineGame():
 
             raise RuntimeError('More than one game found.')
 
-    async def run(self, game_id: str, draw: bool = True) -> bool:
+    async def run(self, draw: bool = True) -> bool:
         """运行对局。
         Args:
-            game_id: 对局ID
             draw: 是否绘制图像
         """
         game = Game(8)
 
-        req = await self.request(game_id)
+        req = await self.request(self.game_id)
         i = 0
+        d = 0
         white = True
         while isinstance(req, str):
-            from_x, from_y, to_x, to_y, arrow_x, arrow_y = map(
-                int, req.split()
-            )
+            from_x, from_y, to_x, to_y, arrow_x, arrow_y = analyze_request(req)
             if from_x >= 0:
                 game.move(
                     Block(from_x, from_y), Block(to_x, to_y),
@@ -102,36 +117,45 @@ class BotzoneOnlineGame():
                 white = False
 
             if draw:
-                print_game(game, True, i)
+                print_game(game, True, i, d)
 
             try:
-                i, _, from_pos, to_pos, arrow_pos = step(game, TimeLimit(50))
+                i, d, _, from_pos, to_pos, arrow_pos = step(
+                    game, TimeLimit(50)
+                )
             except GameFinished as gg:
                 if draw:
-                    print_game(game, False, i)
+                    print_game(game, False, i, d)
                     print('Game finished!')
                     print('Winner:', 'white' if gg.winner else 'black')
                 return gg.winner == white
 
             response = ' '.join(map(str, [*from_pos, *to_pos, *arrow_pos]))
-            req = await self.request(game_id, response)
+            req = await self.request(response)
         return req
 
     async def play(
-        self, botid: str, white: bool = False, draw: bool = True
+        self,
+        botid: str,
+        white: bool = False,
+        start: bool = True,
+        draw: bool = True
     ) -> bool:
         """运行对局。
         Args:
-            botid: 对战的机器人ID
+            botid: 对战的机器人ID            
             white: 自己是否为白棋
+            start: 是否开始新的对局
+            draw: 是否绘制图像
         """
-        game_id = await self.start(botid, white)
+        if start:
+            await self.start(botid, white)
         if draw:
             print('Me color:', 'white' if white else 'black')
-        return await self.run(game_id, draw)
+        return await self.run(draw)
 
 
-def play(white: bool):
+def play(white: bool, start: bool):
     """开始本地 AI 对局。
     Args:
         white: 己方是否为白棋。
@@ -142,15 +166,9 @@ def play(white: bool):
     botid = config['botid']
 
     online_game = BotzoneOnlineGame(uid=config['uid'], token=config['token'])
-    win = asyncio.run(online_game.play(botid, white, draw=True))
+    win = asyncio.run(online_game.play(botid, white, start=start, draw=True))
     print('Win!' if win else 'Lose!')
 
 
 if __name__ == '__main__':
-    t = time.time()
-    while True:
-        play(True)        
-        if time.time() - t > 60:
-            break
-        else:
-            time.sleep(20)
+    play(white=False, start=True)

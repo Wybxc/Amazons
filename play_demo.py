@@ -19,12 +19,13 @@ chess = {
 }
 
 
-def print_game(game: Game, with_score: bool, steps: int):
+def print_game(game: Game, with_score: bool, steps: int, depth: int):
     """打印棋盘。
     Args:
         game: 棋盘
         with_score: 是否打印得分
         steps: 搜索步数
+        depth: 搜索深度
     """
     print("\033c", end="")
     board_size = game.board_size
@@ -50,11 +51,11 @@ def print_game(game: Game, with_score: bool, steps: int):
         m = (this+1e-10) / (this+other+2e-10)
         print(
             'White score: t1: {0:.2f}, t2: {2:.2f}, p1: {1:.2f}, p2: {3:.2f}, m: {4:.2f}'
-            .format(*terroity_position(game), m)
+            .format(*territory_position(game), m)
         )
         print('Judge(Current): ', judge(game))
         print('Search steps:', steps)
-        print('Search depth:', steps / (max(white_moves, black_moves) + 1))
+        print('Search depth:', depth)
 
 
 def play():
@@ -64,13 +65,14 @@ def play():
 
     game = Game(board_size)
     i = 0
+    d = 0
     while True:
-        print_game(game, True, i)
-        limit = TimeLimit(5.5)
+        print_game(game, True, i, d)
+        limit = TimeLimit(5.7)
         try:
-            i, game, *_ = step(game, limit)
+            i, d, game, *_ = step(game, limit)
         except GameFinished as gg:
-            print_game(game, True, i)
+            print_game(game, True, i, d)
             print('Winner:', 'white' if gg.winner else 'black')
             break
 

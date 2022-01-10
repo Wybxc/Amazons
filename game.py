@@ -364,12 +364,12 @@ def mobility(game: Game) -> Tuple[int, int]:
 
 
 @hash_cache
-def terroity_position(game: Game) -> Tuple[float, float, float, float]:
-    """白方的 terroity 特征值和 position 特征值.
+def territory_position(game: Game) -> Tuple[float, float, float, float]:
+    """白方的 territory 特征值和 position 特征值.
     
     Returns:
-        白棋的 terroity_1 特征值, 白棋的 position_1 特征值,
-        白棋的 terroity_2 特征值, 白棋的 position_2 特征值,        
+        白棋的 territory_1 特征值, 白棋的 position_1 特征值,
+        白棋的 territory_2 特征值, 白棋的 position_2 特征值,        
     """
     def queen_move_func(color: bool):
         queen_mv = np.where(game.board == 1, 10000, -1)
@@ -456,9 +456,9 @@ def terroity_position(game: Game) -> Tuple[float, float, float, float]:
     king_move_white, km_white_c = king_move_func(True)
     king_move_black, km_black_c = king_move_func(False)
 
-    white_terroity_1 = 0.
+    white_territory_1 = 0.
     white_position_1 = 0.
-    white_terroity_2 = 0.
+    white_territory_2 = 0.
     white_position_2 = 0.
 
     for x in range(game.board_size):
@@ -469,25 +469,25 @@ def terroity_position(game: Game) -> Tuple[float, float, float, float]:
                 king_move_white(Block(x, y))
                 king_move_black(Block(x, y))
 
-    white_terroity_1 += np.sum(qm_white_c < qm_black_c)
-    white_terroity_1 -= np.sum(qm_white_c > qm_black_c)
+    white_territory_1 += np.sum(qm_white_c < qm_black_c)
+    white_territory_1 -= np.sum(qm_white_c > qm_black_c)
     if game.current:
-        white_terroity_1 += np.sum(
+        white_territory_1 += np.sum(
             (qm_white_c == qm_black_c) & (qm_white_c < 1000)
         ) * 0.2
     else:
-        white_terroity_1 -= np.sum(
+        white_territory_1 -= np.sum(
             (qm_white_c == qm_black_c) & (qm_white_c < 1000)
         ) * 0.2
 
-    white_terroity_2 += np.sum(km_white_c < km_black_c)
-    white_terroity_2 -= np.sum(km_white_c > km_black_c)
+    white_territory_2 += np.sum(km_white_c < km_black_c)
+    white_territory_2 -= np.sum(km_white_c > km_black_c)
     if game.current:
-        white_terroity_2 += np.sum(
+        white_territory_2 += np.sum(
             (km_white_c == km_black_c) & (km_white_c < 1000)
         ) * 0.2
     else:
-        white_terroity_2 -= np.sum(
+        white_territory_2 -= np.sum(
             (km_white_c == km_black_c) & (km_white_c < 1000)
         ) * 0.2
 
@@ -503,7 +503,7 @@ def terroity_position(game: Game) -> Tuple[float, float, float, float]:
         0.0,
     ).sum()
 
-    return white_terroity_1, white_position_1, white_terroity_2, white_position_2
+    return white_territory_1, white_position_1, white_territory_2, white_position_2
 
 
 def sd(x):
@@ -515,7 +515,7 @@ def judge(game: Game) -> float:
     """给出当前局面的胜率评估。"""
     color = game.current
 
-    t1, p1, t2, p2 = terroity_position(game)
+    t1, p1, t2, p2 = territory_position(game)
     if not color:  # 当前回合为黑棋行动
         t1, p1, t2, p2 = -t1, -p1, -t2, -p2
 
@@ -618,11 +618,10 @@ class MCTNode():
 
         return new_node
 
-    def rollout(self) -> float:
+    def evaluate(self) -> float:
         """计算当前局面的收益."""
         score = judge(self.game)
-        diff = 1 - score*2
-        return np.clip(diff, -1, 1)
+        return np.tanh(1 - score*2) * 1.5
 
 
 class MCT():
@@ -634,19 +633,24 @@ class MCT():
     def __init__(self, game: Game):
         self.board_size = game.board_size
 
-        self.root = MCTNode(game, 0.)
+        self.root = MCTNode(game, 0.5)
         self.root.N = 1
 
-    def search(self):
-        """进行一次蒙特卡洛树搜索."""
+    def search(self) -> int:
+        """进行一次蒙特卡洛树搜索.
+
+        Returns:
+            搜索深度.
+        """
         path, node = self.select()
         self.backup(path, node)
         if self.root.ended():
             raise GameFinished(not self.root.game.current)
+        return len(path) + 1
 
     def policy(self):
         """根据搜索结果, 计算下一步操作."""
-        _, index = self.root.UCT(0)
+        _, index = self.root.UCT(0.)
         return self.root.actions[index]
 
     def select(self):
@@ -671,7 +675,7 @@ class MCT():
 
     def backup(self, path: Sequence[MCTNode], node: MCTNode):
         """向上传播."""
-        delta = node.rollout()
+        delta = node.evaluate()
 
         node.N += 1
         node.Q += delta
@@ -687,9 +691,10 @@ def step(game: Game, limit: Callable[[], bool]):
     mct = MCT(game)
 
     i = 0
+    d = 0
     while limit():
         i += 1
-        mct.search()
+        d = max(d, mct.search())
 
     action = mct.policy()
     index, to_pos, arrow_pos = game.decode_action(action)
@@ -697,7 +702,7 @@ def step(game: Game, limit: Callable[[], bool]):
 
     game.do_action(action)
 
-    return i, game, from_pos, to_pos, arrow_pos
+    return i, d, game, from_pos, to_pos, arrow_pos
 
 
 class TimeLimit():
@@ -720,8 +725,8 @@ class CountLimit():
         self._count += 1
         return self._count <= self._n
 
-
-if __name__ == "__main__":
+#pythran export main()
+def main():
     game = Game(8)
     turn = int(input())
     t = time.time()
@@ -736,6 +741,9 @@ if __name__ == "__main__":
                 Block(arrow_x, arrow_y)
             )
 
-    _, _, from_pos, to_pos, arrow_pos = step(game, TimeLimit(5.8))
+    i, d, _, from_pos, to_pos, arrow_pos = step(game, TimeLimit(5.5))
     print(' '.join(map(str, [*from_pos, *to_pos, *arrow_pos])))
-    print('Time:', time.time() - t)
+    print(f'Time: {time.time() - t:.2f}, Count: {i}, Depth: {d}')
+
+if __name__ == "__main__":
+    main()
